@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DCCN Web Chat - {{ username }}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f2f5;
+        }
+        .container {
+            display: flex;
+            max-width: 1200px;
+            margin: 0 auto;
+            height: 100vh;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            background-color: white;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        /* DM Chat Container */
+        .dm-container {
+            position: fixed;
+            bottom: 0;
+            right: 20px;
+            width: 300px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px 8px 0 0;
+            display: none;
+            flex-direction: column;
+            z-index: 1000;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .dm-header {
+            background: #2c3e50;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .user-item {
+            padding: 12px 15px;
+            margin: 8px 0;
+            background: #f8f9fa;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border: 1px solid #e9ecef;
+        }
+        
+        .user-item:hover {
+            background-color: #e9ecef;
+        }
+        
+        .user-item .username {
+            flex-grow: 1;
+            margin-right: 10px;
+            font-weight: 500;
+            color: #212529;
+        }
+        
+        .no-users {
+            padding: 15px;
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        .dm-messages {
+            height: 250px;
+            overflow-y: auto;
+            padding: 10px;
+            background: #f9f9f9;
+        }
+        
+        .dm-input-container {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #eee;
+            background: white;
+        }
+        
+        .dm-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 5px;
+        }
+        
+        .dm-send-btn {
+            padding: 8px 15px;
+            background: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .dm-close {
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .user-item {
+            padding: 8px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .user-item:hover {
+            background: #f5f5f5;
+        }
+        
+        .dm-button {
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 3px 8px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .dm-button:hover {
+            background: #2980b9;
+        }
+        
+        .dm-message {
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 4px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        
+        .dm-message.sent {
+            background: #e3f2fd;
+            margin-left: auto;
+        }
+        
+        .dm-message.received {
+            background: #f1f1f1;
+            margin-right: auto;
+        }
+        .chat-header {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 8px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+        .message.sent {
+            background-color: #e3f2fd;
+            margin-left: auto;
+            border-bottom-right-radius: 0;
+        }
+        .message.received {
+            background-color: #e9ecef;
+            margin-right: auto;
+            border-bottom-left-radius: 0;
+        }
+        .message.system {
+            background-color: #f8f9fa;
+            margin: 10px auto;
+            text-align: center;
+            font-style: italic;
+            color: #6c757d;
+            max-width: 100%;
+        }
+        .message .username {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .message .time {
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            background-color: #f1f3f5;
+            border-top: 1px solid #dee2e6;
+        }
+        #message-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        #send-button {
+            padding: 12px 25px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        #send-button:hover {
+            background-color: #2980b9;
+        }
+        .user-list {
+            padding: 10px;
+            overflow-y: auto;
+        }
+        
+        .user-status {
+            width: 10px;
+            height: 10px;
+            background-color: #2ecc71;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .logout-btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-top: 20px;
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+        }
+        
+        .logout-btn:hover {
+            background-color: #c0392b;
+        }
+        
+        .typing-indicator {
+            color: #6c757d;
+            font-style: italic;
+            margin: 5px 0;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar with online users -->
+        <div class="sidebar">
+            <h3>Online Users</h3>
+            <div id="online-users">
+                <!-- Online users will be listed here -->
+                <div class="user-list">
+                    <!-- Users will be added here dynamically -->
+                </div>
+            </div>
+            <ul id="user-list" class="user-list">
+                <!-- Users will be added here dynamically -->
+            </ul>
+            <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+        </div>
+
+        <!-- Main chat area -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <h2>DCCN Web Chat</h2>
+                <div>Welcome, {{ username }}!</div>
+            </div>
+            
+            <div id="chat-messages" class="chat-messages">
+                <!-- Messages will be added here -->
+            </div>
+            
+            <div class="typing-indicator" id="typing-indicator"></div>
+            
+            <div class="chat-input">
+                <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off">
+                <button id="send-button">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize socket.io
+        const socket = io();
+        const userList = document.getElementById('user-list');
+        const chatMessages = document.querySelector('.chat-messages');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const dmContainer = document.getElementById('dm-container');
+        const dmWindows = new Map(); // username -> DM window element
+        const dmUnreadCounts = new Map(); // username -> unread count
+        
+        // Store current user from template
+        const currentUser = '{{ username }}';
+        
+        // Request notification permission
+        if ('Notification' in window) {
+            if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+                Notification.requestPermission();
+            }
+        }
+        
+        // Auto-scroll to bottom of chat
+        function scrollToBottom(element) {
+            if (element) {
+                element.scrollTop = element.scrollHeight;
+            }
+        }
+        
+        // Add a message to the main chat
+        function addMessage(messageData, isSystem = false, isSent = false) {
+            console.log('Adding message to main chat:', { messageData, isSystem, isSent });
+            
+            // This function should only handle public chat messages
+            if (messageData.is_private) {
+                console.error('Private message should not be added to main chat');
+                return;
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isSystem ? 'system' : (isSent ? 'sent' : 'received')}`;
+            
+            if (isSystem) {
+                messageDiv.textContent = messageData.message || messageData;
+            } else {
+                messageDiv.innerHTML = `
+                    <span class="username">${messageData.username || 'System'}</span>
+                    <span class="time">${messageData.timestamp || ''}</span>
+                    <div class="message-content">${messageData.message || messageData}</div>
+                `;
+            }
+            
+            if (!chatMessages) {
+                console.error('chatMessages element not found!');
+                return;
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            scrollToBottom(chatMessages);
+            console.log('Public message added to main chat');
+        }
+        
+        // Update online users list
+        function updateUserList(users) {
+            try {
+                console.log('Updating user list with:', users);
+                if (!userList) {
+                    console.error('User list container not found');
+                    return;
+                }
+                
+                userList.innerHTML = '';
+                
+                // Handle different response formats
+                let userArray = [];
+                
+                if (Array.isArray(users)) {
+                    userArray = users;
+                } else if (users && typeof users === 'object') {
+                    // Handle both {users: [...]} and {username: '...', ...} formats
+                    userArray = Array.isArray(users.users) ? users.users : [users];
+                }
+                
+                // Process the user array to extract usernames
+                const uniqueUsernames = [];
+                const seen = new Set();
+                
+                userArray.forEach(user => {
+                    let username = '';
+                    
+                    if (typeof user === 'string') {
+                        username = user.trim();
+                    } else if (user && typeof user === 'object') {
+                        username = user.username || user.name || '';
+                    }
+                    
+                    if (username && username !== currentUser && !seen.has(username)) {
+                        seen.add(username);
+                        uniqueUsernames.push(username);
+                    }
+                });
+                
+                console.log('Processed users:', uniqueUsernames);
+                
+                if (uniqueUsernames.length === 0) {
+                    userList.innerHTML = '<div class="no-users">No other users online</div>';
+                    return;
+                }
+                
+                // Sort usernames alphabetically
+                uniqueUsernames.sort((a, b) => a.localeCompare(b));
+                
+                // Create user list items
+                uniqueUsernames.forEach(username => {
+                    const userElement = document.createElement('div');
+                    userElement.className = 'user-item';
+                    userElement.innerHTML = `
+                        <span class="username">${username}</span>
+                        <button class="dm-button" data-username="${username}">DM</button>
+                    `;
+                    
+                    // Add DM button event listener
+                    const dmButton = userElement.querySelector('.dm-button');
+                    if (dmButton) {
+                        dmButton.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            openDMChat(username);
+                        });
+                    }
+                    
+                    // Make the whole user item clickable
+                    userElement.addEventListener('click', (e) => {
+                        if (e.target !== dmButton) {
+                            openDMChat(username);
+                        }
+                    });
+                    
+                    userList.appendChild(userElement);
+                });
+                
+            } catch (error) {
+                console.error('Error updating user list:', error);
+                if (userList) {
+                    userList.innerHTML = '<div class="no-users">Error loading users</div>';
+                }
+            }
+        }
+        
+        // Update user list item with unread count
+        function updateUserListItem(username, element) {
+            const unreadCount = dmUnreadCounts.get(username) || 0;
+            let unreadBadge = '';
+            
+            if (unreadCount > 0) {
+                unreadBadge = `<span class="unread-badge" data-username="${username}">
+                    ${unreadCount > 9 ? '9+' : unreadCount}
+                </span>`;
+            }
+            
+            const usernameSpan = element.querySelector('.username');
+            if (usernameSpan) {
+                usernameSpan.innerHTML = `${username} ${unreadBadge}`;
+            }
+            
+            // Add unread class to the user item
+            if (unreadCount > 0) {
+                element.classList.add('has-unread');
+            } else {
+                element.classList.remove('has-unread');
+            }
+        }
+        
+        // Open or focus a DM chat window
+        function openDMChat(username) {
+            if (!username || username === currentUser) return;
+            
+            console.log('Opening DM with:', username);
+            
+            // Clear unread count when opening DM
+            if (dmUnreadCounts.has(username)) {
+                dmUnreadCounts.delete(username);
+                updateUserList();
+            }
+            
+            if (dmWindows.has(username)) {
+                const dmWindow = dmWindows.get(username);
+                dmWindow.style.display = 'flex';
+                dmWindow.style.flexDirection = 'column';
+                // Scroll to bottom when opening
+                const messages = dmWindow.querySelector('.dm-messages');
+                if (messages) scrollToBottom(messages);
+                dmWindow.style.zIndex = '1000';
+                return;
+            }
+            
+            // Create new DM window
+            const newDmContainer = document.createElement('div');
+            newDmContainer.className = 'dm-container';
+            newDmContainer.id = `dm-${username}`;
+            newDmContainer.style.display = 'flex';
+            newDmContainer.style.flexDirection = 'column';
+            newDmContainer.style.position = 'fixed';
+            newDmContainer.style.bottom = '20px';
+            newDmContainer.style.right = (Object.keys(dmWindows).length * 20) + 'px';
+            newDmContainer.style.width = '300px';
+            newDmContainer.style.height = '400px';
+            newDmContainer.style.backgroundColor = 'white';
+            newDmContainer.style.border = '1px solid #ddd';
+            newDmContainer.style.borderRadius = '8px';
+            newDmContainer.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+            newDmContainer.style.zIndex = '1000';
+            newDmContainer.style.overflow = 'hidden';
+            
+            newDmContainer.innerHTML = `
+                <div class="dm-header" style="padding: 10px; background: #2c3e50; color: white; display: flex; justify-content: space-between; align-items: center;">
+                    <span>Chat with ${username}</span>
+                    <span class="dm-close" style="cursor: pointer; font-size: 20px;">×</span>
+                </div>
+                <div class="dm-messages" id="dm-messages-${username}" style="flex: 1; overflow-y: auto; padding: 10px;"></div>
+                <div class="dm-input-container" style="display: flex; padding: 10px; border-top: 1px solid #eee;">
+                    <input type="text" class="dm-input" placeholder="Type a message..." data-username="${username}" 
+                           style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-right: 5px;">
+                    <button class="dm-send-btn" data-username="${username}" 
+                            style="padding: 8px 15px; background: #2c3e50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Send
+                    </button>
+                </div>
+            `;
+            
+            document.body.appendChild(newDmContainer);
+            dmWindows.set(username, newDmContainer);
+            
+            // Add event listeners for the new DM window
+            const closeBtn = newDmContainer.querySelector('.dm-close');
+            const dmInput = newDmContainer.querySelector('.dm-input');
+            const dmSendBtn = newDmContainer.querySelector('.dm-send-btn');
+            
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                newDmContainer.style.display = 'none';
+            });
+            
+            const sendDM = () => {
+                const message = dmInput.value.trim();
+                if (message) {
+                    console.log('Sending DM to', username, ':', message);
+                    
+                    // Emit private message
+                    socket.emit('send_message', {
+                        message: message,
+                        recipient: username,
+                        timestamp: new Date().toLocaleTimeString()
+                    });
+                    
+                    // Add to DM window
+                    addDMMessage(username, {
+                        sender: currentUser,
+                        message: message,
+                        timestamp: new Date().toLocaleTimeString(),
+                        is_private: true
+                    });
+                    
+                    dmInput.value = '';
+                }
+            };
+            
+            dmInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    sendDM();
+                }
+            });
+            
+            dmSendBtn.addEventListener('click', sendDM);
+            
+            // Focus the input when DM window is opened
+            setTimeout(() => {
+                if (dmInput) dmInput.focus();
+            }, 100);
+            
+            // Make DM window draggable
+            const header = newDmContainer.querySelector('.dm-header');
+            let isDragging = false;
+            let offsetX, offsetY;
+            
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                offsetX = e.clientX - newDmContainer.getBoundingClientRect().left;
+                offsetY = e.clientY - newDmContainer.getBoundingClientRect().top;
+                newDmContainer.style.cursor = 'grabbing';
+                e.preventDefault();
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                
+                const x = e.clientX - offsetX;
+                const y = e.clientY - offsetY;
+                
+                newDmContainer.style.left = x + 'px';
+                newDmContainer.style.top = y + 'px';
+                newDmContainer.style.right = 'auto';
+                newDmContainer.style.bottom = 'auto';
+            });
+            
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                newDmContainer.style.cursor = 'default';
+            });
+            
+            // Load previous messages
+            socket.emit('get_private_messages', { with_user: username });
+        }
+        
+        // Add a message to a DM window
+        function addDMMessage(username, data) {
+            console.log('Adding DM message:', { username, data });
+            
+            // If DM window doesn't exist, create it
+            if (!dmWindows.has(username)) {
+                console.log('DM window not found, opening new one for:', username);
+                openDMChat(username);
+            }
+            
+            const dmContainer = dmWindows.get(username);
+            if (!dmContainer) {
+                console.error('Failed to get DM container for user:', username);
+                return;
+            }
+            
+            const messagesDiv = dmContainer.querySelector('.dm-messages');
+            if (!messagesDiv) {
+                console.error('Messages div not found in DM container');
+                return;
+            }
+            
+            const messageDiv = document.createElement('div');
+            const isCurrentUser = data.sender === currentUser;
+            
+            messageDiv.className = `dm-message ${isCurrentUser ? 'sent' : 'received'}`;
+            messageDiv.style.margin = '5px 0';
+            messageDiv.style.padding = '8px 12px';
+            messageDiv.style.borderRadius = '15px';
+            messageDiv.style.maxWidth = '80%';
+            messageDiv.style.wordWrap = 'break-word';
+            
+            if (isCurrentUser) {
+                messageDiv.style.marginLeft = 'auto';
+                messageDiv.style.backgroundColor = '#dcf8c6';
+                messageDiv.style.borderBottomRightRadius = '2px';
+            } else {
+                messageDiv.style.marginRight = 'auto';
+                messageDiv.style.backgroundColor = '#f0f0f0';
+                messageDiv.style.borderBottomLeftRadius = '2px';
+            }
+            
+            messageDiv.innerHTML = `
+                <div style="font-weight: bold; font-size: 0.9em; margin-bottom: 3px;">
+                    ${isCurrentUser ? 'You' : data.sender}
+                </div>
+                <div style="margin: 5px 0;">${data.message}</div>
+                <div style="font-size: 0.7em; color: #666; text-align: right;">
+                    ${data.timestamp || new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            scrollToBottom(messagesDiv);
+            
+            // Make sure the DM window is visible
+            if (dmContainer.style.display === 'none') {
+                dmContainer.style.display = 'flex';
+                // Show a notification if the window was hidden
+                if (!isCurrentUser) {
+                    showDMNotification(username, data.message);
+                }
+            }
+            
+            console.log('DM message added to window:', username);
+        }
+        
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Send message function
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            console.log('Sending message:', message);
+            
+            if (!message) return;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            
+            // Check if we're in a DM or public chat
+            const activeDm = document.querySelector('.dm-container[style*="display: flex"]');
+            
+            if (activeDm) {
+                // This is a DM
+                const recipient = activeDm.id.replace('dm-', '');
+                console.log('Sending DM to:', recipient);
+                
+                // Add the message to the DM window immediately for better UX
+                addDMMessage(recipient, {
+                    sender: currentUser,
+                    message: message,
+                    timestamp: timestamp,
+                    is_private: true
+                });
+                
+                // Send the DM
+                socket.emit('send_message', {
+                    message: message,
+                    recipient: recipient,
+                    timestamp: timestamp
+                }, (response) => {
+                    if (response && response.status === 'error') {
+                        console.error('Error sending DM:', response.message);
+                        // Show error in the DM window
+                        addDMMessage(recipient, {
+                            sender: 'System',
+                            message: `Error: ${response.message}`,
+                            timestamp: new Date().toLocaleTimeString(),
+                            is_private: true
+                        });
+                    }
+                });
+            } else {
+                // This is a public message
+                console.log('Sending public message');
+                
+                // Add the message to the UI immediately for better UX
+                addMessage({
+                    username: currentUser,
+                    message: message,
+                    timestamp: timestamp,
+                    is_private: false
+                });
+                
+                // Send the public message
+                socket.emit('send_message', { 
+                    message: message,
+                    timestamp: timestamp
+                }, (response) => {
+                    if (response && response.status === 'error') {
+                        console.error('Error sending message:', response.message);
+                        addMessage({
+                            message: `Error: ${response.message}`,
+                            isSystem: true
+                        });
+                    }
+                });
+            }
+            
+            // Clear the input field
+            messageInput.value = '';
+            
+            // Clear the input field
+            messageInput.value = '';
+        }
+        
+        // Socket.io event handlers
+        // Debug socket connection
+        socket.on('connect', () => {
+            console.log('✅ Connected to server with socket ID:', socket.id);
+            
+            // Debug: Check if we have a username
+            console.log('Current username:', currentUser);
+            
+            // Load online users
+            fetch('/api/online_users')
+                .then(response => {
+                    console.log('Fetched online users, status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Online users:', data.users || []);
+                    updateUserList(data.users || []);
+                })
+                .catch(error => {
+                    console.error('Error fetching online users:', error);
+                });
+        });
+
+        socket.on('new_message', (data) => {
+            console.log('Received new_message event:', data);
+            
+            // Only process public messages (not DMs) and only if they're from someone else
+            if (data.is_private) {
+                console.log('Skipping private message in main chat');
+                return;
+            }
+            
+            if (data.username !== currentUser) {
+                console.log('Adding public message to UI');
+                addMessage({
+                    username: data.username,
+                    message: data.message,
+                    timestamp: data.timestamp,
+                    is_private: false
+                });
+            } else {
+                console.log('Skipping own public message');
+            }
+        });
+        
+        // Handle all private messages (both sent and received)
+        socket.on('private_message', (data) => {
+            console.log('Received private message:', data);
+            
+            // Determine the other user in the conversation
+            const otherUser = data.from === currentUser ? data.to : data.from;
+            
+            // Show notification if this is a new message from someone else
+            if (data.from !== currentUser) {
+                // Show notification if window is not focused
+                if (!document.hasFocus()) {
+                    const notification = new Notification(`New message from ${data.from}`, {
+                        body: data.message,
+                        icon: '/static/favicon.ico'
+                    });
+                    
+                    notification.onclick = function() {
+                        window.focus();
+                        openDMChat(data.from);
+                        this.close();
+                    };
+                }
+                
+                // Update unread count
+                const unreadCount = dmUnreadCounts.get(data.from) || 0;
+                dmUnreadCounts.set(data.from, unreadCount + 1);
+                updateUserList();
+            }
+            
+            // Open the DM window if it's not already open
+            openDMChat(otherUser);
+            
+            // Add the message to the DM window
+            addDMMessage(otherUser, {
+                sender: data.from,
+                message: data.message,
+                timestamp: data.timestamp,
+                is_private: true
+            });
+        });
+        
+        socket.on('private_messages', (data) => {
+            const messages = data.messages || [];
+            messages.forEach(msg => {
+                addDMMessage(data.with_user, msg);
+            });
+        });
+
+        socket.on('user_joined', (data) => {
+            addMessage({
+                username: 'System',
+                message: data.message
+            }, true);
+        });
+
+        socket.on('user_left', (data) => {
+            addMessage({
+                username: 'System',
+                message: data.message
+            }, true);
+        });
+
+        socket.on('update_users', (data) => {
+            updateUserList(data);
+        });
+        
+        // Close DM window when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.dm-container') && !e.target.matches('.dm-button')) {
+                dmWindows.forEach(window => {
+                    window.style.display = 'none';
+                });
+                typingIndicator.textContent = `${data.username} is typing...`;
+            }
+        });
+        
+        socket.on('stop_typing', () => {
+            typingIndicator.textContent = '';
+        });
+        
+        // Initial scroll to bottom
+        scrollToBottom();
+    </script>
+</body>
+</html>
